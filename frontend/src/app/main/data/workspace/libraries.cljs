@@ -11,6 +11,7 @@
    [app.common.geom.shapes :as geom]
    [app.common.logging :as log]
    [app.common.pages :as cp]
+   [app.common.pages.changes-builder :as pcb]
    [app.common.pages.helpers :as cph]
    [app.common.spec :as us]
    [app.common.spec.change :as spec.change]
@@ -100,25 +101,20 @@
 
       ptk/WatchEvent
       (watch [it _ _]
-        (let [rchg {:type :add-color
-                    :color color}
-              uchg {:type :del-color
-                    :id id}]
+        (let [changes (-> (pcb/empty-changes it)
+                          (pcb/add-color color))]
           (rx/of #(assoc-in % [:workspace-local :color-for-rename] id)
-                 (dch/commit-changes {:redo-changes [rchg]
-                                      :undo-changes [uchg]
-                                      :origin it})))))))
+                 (dch/commit-changes changes)))))))
+
 (defn add-recent-color
   [color]
   (us/assert ::spec.color/recent-color color)
   (ptk/reify ::add-recent-color
     ptk/WatchEvent
     (watch [it _ _]
-      (let [rchg {:type :add-recent-color
-                  :color color}]
-        (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes []
-                                    :origin it}))))))
+      (let [changes (-> (pcb/empty-changes it)
+                        (pcb/add-recent-color color))]
+        (rx/of (dch/commit-changes changes))))))
 
 (def clear-color-for-rename
   (ptk/reify ::clear-color-for-rename
@@ -133,17 +129,14 @@
   (ptk/reify ::update-color
     ptk/WatchEvent
     (watch [it state _]
-      (let [[path name] (cph/parse-path-name (:name color))
-            color (assoc color :path path :name name)
-            prev (get-in state [:workspace-data :colors id])
-            rchg {:type :mod-color
-                  :color color}
-            uchg {:type :mod-color
-                  :color prev}]
+      (let [data        (get state :workspace-data)
+            [path name] (cph/parse-path-name (:name color))
+            color       (assoc color :path path :name name)
+            changes     (-> (pcb/empty-changes it)
+                            (pcb/with-library-data data)
+                            (pcb/update-color color))]
         (rx/of (dwu/start-undo-transaction)
-               (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it})
+               (dch/commit-changes changes)
                (sync-file (:current-file-id state) file-id)
                (dwu/commit-undo-transaction))))))
 
@@ -153,14 +146,11 @@
   (ptk/reify ::delete-color
     ptk/WatchEvent
     (watch [it state _]
-      (let [prev (get-in state [:workspace-data :colors id])
-            rchg {:type :del-color
-                  :id id}
-            uchg {:type :add-color
-                  :color prev}]
-        (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it}))))))
+      (let [data    (get state :workspace-data)
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/delete-color id))]
+        (rx/of (dch/commit-changes changes))))))
 
 (defn add-media
   [{:keys [id] :as media}]

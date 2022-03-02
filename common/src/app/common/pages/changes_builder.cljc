@@ -30,17 +30,24 @@
   [changes save-undo?]
   (assoc changes :save-undo? save-undo?))
 
-(defn with-page [changes page]
+(defn with-page
+  [changes page]
   (vary-meta changes assoc
              ::page page
              ::page-id (:id page)
              ::objects (:objects page)))
 
-(defn with-objects [changes objects]
+(defn with-objects
+  [changes objects]
   (let [file-data (-> (cp/make-file-data (uuid/next) uuid/zero)
                       (assoc-in [:pages-index uuid/zero :objects] objects))]
     (vary-meta changes assoc ::file-data file-data
                              ::applied-changes 0)))
+
+(defn with-library-data
+  [changes data]
+  (vary-meta changes assoc
+             ::library-data data))
 
 (defn amend-last-change
   "Modify the last redo-changes added with an update function."
@@ -64,6 +71,10 @@
 (defn- assert-objects
   [changes]
   (assert (contains? (meta changes) ::file-data) "Call (with-objects) before using this function"))
+
+(defn- assert-library
+  [changes]
+  (assert (contains? (meta changes) ::library-data) "Call (with-library-data) before using this function"))
 
 (defn- apply-changes-local
   [changes]
@@ -353,5 +364,40 @@
               changes)))]
 
     (-> (reduce resize-parent changes all-parents)
+        (apply-changes-local))))
+
+;; Library changes
+
+(defn add-recent-color
+  [changes color]
+  (-> changes
+      (update :redo-changes conj {:type :add-recent-color :color color})
+      (apply-changes-local)))
+
+(defn add-color
+  [changes color]
+  (-> changes
+      (update :redo-changes conj {:type :add-color :color color})
+      (update :undo-changes conj {:type :del-color :id (:id color)})
+      (apply-changes-local)))
+
+(defn update-color
+  [changes color]
+  (assert-library changes)
+  (let [library-data (::library-data (meta changes))
+        prev-color (get-in library-data [:colors (:id color)])]
+    (-> changes
+        (update :redo-changes conj {:type :mod-color :color color})
+        (update :undo-changes conj {:type :mod-color :color prev-color})
+        (apply-changes-local))))
+
+(defn delete-color
+  [changes color-id]
+  (assert-library changes)
+  (let [library-data (::library-data (meta changes))
+        prev-color (get-in library-data [:colors color-id])]
+    (-> changes
+        (update :redo-changes conj {:type :del-color :id color-id})
+        (update :undo-changes conj {:type :add-color :color prev-color})
         (apply-changes-local))))
 
