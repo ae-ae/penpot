@@ -135,76 +135,27 @@
   (if (and (= (count shapes) 1)
            (:component-id (first shapes)))
     empty-changes
-    (let [name (if (= 1 (count shapes)) (:name (first shapes)) "Component-1")
-          [group rchanges uchanges]
+    (let [name        (if (= 1 (count shapes)) (:name (first shapes)) "Component-1")
+          [path name] (cph/parse-path-name name)
+
+          [group changes]
           (if (and (= (count shapes) 1)
                    (= (:type (first shapes)) :group))
-            [(first shapes) [] []]
-            (let [[group changes] (dwg/prepare-create-group it objects page-id shapes name true)]
-              [group (:redo-changes changes) (:undo-changes changes)]))
-
-          ;; Asserts for documentation purposes
-          _ (us/assert vector? rchanges)
-          _ (us/assert vector? uchanges)
+            [(first shapes) (-> (pcb/empty-changes it page-id)
+                                (pcb/with-objects objects))]
+            (dwg/prepare-create-group it objects page-id shapes name true))
 
           [new-shape new-shapes updated-shapes]
           (make-component-shape group objects file-id)
 
-          rchanges (conj rchanges
-                         {:type :add-component
-                          :id (:id new-shape)
-                          :name name
-                          :shapes new-shapes})
-
-          rchanges (into rchanges
-                         (map (fn [updated-shape]
-                                {:type :mod-obj
-                                 :page-id page-id
-                                 :id (:id updated-shape)
-                                 :operations [{:type :set
-                                               :attr :component-id
-                                               :val (:component-id updated-shape)}
-                                              {:type :set
-                                               :attr :component-file
-                                               :val (:component-file updated-shape)}
-                                              {:type :set
-                                               :attr :component-root?
-                                               :val (:component-root? updated-shape)}
-                                              {:type :set
-                                               :attr :shape-ref
-                                               :val (:shape-ref updated-shape)}
-                                              {:type :set
-                                               :attr :touched
-                                               :val (:touched updated-shape)}]})
-                              updated-shapes))
-
-          uchanges (conj uchanges
-                         {:type :del-component
-                          :id (:id new-shape)})
-
-          uchanges (into uchanges
-                         (map (fn [updated-shape]
-                                (let [original-shape (get objects (:id updated-shape))]
-                                  {:type :mod-obj
-                                   :page-id page-id
-                                   :id (:id updated-shape)
-                                   :operations [{:type :set
-                                                 :attr :component-id
-                                                 :val (:component-id original-shape)}
-                                                {:type :set
-                                                 :attr :component-file
-                                                 :val (:component-file original-shape)}
-                                                {:type :set
-                                                 :attr :component-root?
-                                                 :val (:component-root? original-shape)}
-                                                {:type :set
-                                                 :attr :shape-ref
-                                                 :val (:shape-ref original-shape)}
-                                                {:type :set
-                                                 :attr :touched
-                                                 :val (:touched original-shape)}]}))
-                              updated-shapes))]
-      [group rchanges uchanges])))
+          changes (-> (pcb/empty-changes it page-id)
+                      (pcb/with-objects objects)
+                      (pcb/add-component (:id new-shape)
+                                         path
+                                         name
+                                         new-shapes
+                                         updated-shapes))]
+      [group changes])))
 
 (defn duplicate-component
   "Clone the root shape of the component and all children. Generate new

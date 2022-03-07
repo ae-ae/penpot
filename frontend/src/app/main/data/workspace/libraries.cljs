@@ -158,14 +158,10 @@
   (ptk/reify ::add-media
     ptk/WatchEvent
     (watch [it _ _]
-      (let [obj  (select-keys media [:id :name :width :height :mtype])
-            rchg {:type :add-media
-                  :object obj}
-            uchg {:type :del-media
-                  :id id}]
-        (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it}))))))
+      (let [obj     (select-keys media [:id :name :width :height :mtype])
+            changes (-> (pcb/empty-changes it)
+                        (pcb/add-media obj))]
+        (rx/of (dch/commit-changes changes))))))
 
 (defn rename-media
   [id new-name]
@@ -174,22 +170,14 @@
   (ptk/reify ::rename-media
     ptk/WatchEvent
     (watch [it state _]
-      (let [object (get-in state [:workspace-data :media id])
+      (let [data        (get state :workspace-data)
             [path name] (cph/parse-path-name new-name)
-
-            rchanges [{:type :mod-media
-                       :object {:id id
-                                :name name
-                                :path path}}]
-
-            uchanges [{:type :mod-media
-                       :object {:id id
-                                :name (:name object)
-                                :path (:path object)}}]]
-
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+            object      (get-in data [:media id])
+            new-object  (assoc object :path path :name name)
+            changes     (-> (pcb/empty-changes it)
+                            (pcb/with-library-data data)
+                            (pcb/update-media new-object))]
+        (rx/of (dch/commit-changes changes))))))
 
 (defn delete-media
   [{:keys [id] :as params}]
@@ -197,14 +185,11 @@
   (ptk/reify ::delete-media
     ptk/WatchEvent
     (watch [it state _]
-      (let [prev (get-in state [:workspace-data :media id])
-            rchg {:type :del-media
-                  :id id}
-            uchg {:type :add-media
-                  :object prev}]
-        (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it}))))))
+      (let [data        (get state :workspace-data)
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/delete-media id))]
+        (rx/of (dch/commit-changes changes))))))
 
 (defn add-typography
   ([typography] (add-typography typography true))
@@ -217,13 +202,9 @@
 
        ptk/WatchEvent
        (watch [it _ _]
-         (let [rchg {:type :add-typography
-                     :typography typography}
-               uchg {:type :del-typography
-                     :id (:id typography)}]
-           (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                       :undo-changes [uchg]
-                                       :origin it})
+         (let [changes (-> (pcb/empty-changes it)
+                           (pcb/add-typography typography))]
+           (rx/of (dch/commit-changes changes)
                   #(cond-> %
                      edit?
                      (assoc-in [:workspace-global :rename-typography] (:id typography))))))))))
@@ -235,15 +216,12 @@
   (ptk/reify ::update-typography
     ptk/WatchEvent
     (watch [it state _]
-      (let [prev        (get-in state [:workspace-data :typographies (:id typography)])
-            rchg        {:type :mod-typography
-                         :typography typography}
-            uchg        {:type :mod-typography
-                         :typography prev}]
+      (let [data    (get state :workspace-data)
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/update-typography typography))]
         (rx/of (dwu/start-undo-transaction)
-               (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it})
+               (dch/commit-changes changes)
                (sync-file (:current-file-id state) file-id)
                (dwu/commit-undo-transaction))))))
 
@@ -253,15 +231,11 @@
   (ptk/reify ::delete-typography
     ptk/WatchEvent
     (watch [it state _]
-      (let [prev (get-in state [:workspace-data :typographies id])
-            rchg {:type :del-typography
-                  :id id}
-            uchg {:type :add-typography
-                  :typography prev}]
-        (rx/of (dch/commit-changes {:redo-changes [rchg]
-                                    :undo-changes [uchg]
-                                    :origin it}))))))
-
+      (let [data    (get state :workspace-data)
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/delete-typography id))]
+        (rx/of (dch/commit-changes changes))))))
 
 (defn- add-component2
   "This is the second step of the component creation."
@@ -277,12 +251,11 @@
             objects  (wsh/lookup-page-objects state page-id)
             shapes   (dwg/shapes-for-grouping objects selected)]
         (when-not (empty? shapes)
-          (let [[group rchanges uchanges]
+          (let [[group changes]
                 (dwlh/generate-add-component it shapes objects page-id file-id)]
-            (when-not (empty? rchanges)
-              (rx/of (dch/commit-changes {:redo-changes rchanges
-                                          :undo-changes uchanges
-                                          :origin it})
+            (js/console.log "changes" (clj->js changes))
+            (when-not (empty? (:redo-changes changes))
+              (rx/of (dch/commit-changes changes)
                      (dwc/select-shapes (d/ordered-set (:id group)))))))))))
 
 (defn add-component
@@ -307,31 +280,27 @@
   (ptk/reify ::rename-component
     ptk/WatchEvent
     (watch [it state _]
-      ;; NOTE: we need to ensure the component exists, because there
-      ;; are small posibilities of race conditions with component
-      ;; deletion.
-      (when-let [component (get-in state [:workspace-data :components id])]
-        (let [[path name] (cph/parse-path-name new-name)
-              objects     (get component :objects)
-              ;; Give the same name to the root shape
-              new-objects (assoc-in objects
-                                    [(:id component) :name]
-                                    name)
+      (let [data        (get state :workspace-data)
+            [path name] (cph/parse-path-name new-name)
 
-              rchanges [{:type :mod-component
-                         :id id
-                         :name name
-                         :path path
-                         :objects new-objects}]
+            update-fn
+            (fn [component]
+              ;; NOTE: we need to ensure the component exists,
+              ;; because there are small posibilities of race
+              ;; conditions with component deletion.
+              (when component
+                (-> component
+                    (assoc :path path)
+                    (assoc :name name)
+                    (update :objects 
+                            ;; Give the same name to the root shape
+                            #(assoc-in % [id :name] name)))))
 
-              uchanges [{:type :mod-component
-                         :id id
-                         :name (:name component)
-                         :path (:path component)
-                         :objects objects}]]
-          (rx/of (dch/commit-changes {:redo-changes rchanges
-                                      :undo-changes uchanges
-                                      :origin it})))))))
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/update-component id update-fn))]
+
+          (rx/of (dch/commit-changes changes))))))
 
 (defn duplicate-component
   "Create a new component copied from the one with the given id."
@@ -348,18 +317,15 @@
             [new-shape new-shapes _updated-shapes]
             (dwlh/duplicate-component component)
 
-            rchanges [{:type :add-component
-                       :id (:id new-shape)
-                       :name new-name
-                       :path (:path component)
-                       :shapes new-shapes}]
+            changes (-> (pcb/empty-changes it nil) ;; no objects are changed
+                        (pcb/with-objects nil)     ;; in the current page
+                        (pcb/add-component (:id new-shape)
+                                           (:path component)
+                                           new-name
+                                           new-shapes
+                                           []))]
 
-            uchanges [{:type :del-component
-                       :id (:id new-shape)}]]
-
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+        (rx/of (dch/commit-changes changes))))))
 
 (defn delete-component
   "Delete the component with the given id, from the current file library."
@@ -368,20 +334,12 @@
   (ptk/reify ::delete-component
     ptk/WatchEvent
     (watch [it state _]
-      (let [component (get-in state [:workspace-data :components id])
+      (let [data        (get state :workspace-data)
+            changes (-> (pcb/empty-changes it)
+                        (pcb/with-library-data data)
+                        (pcb/delete-component id))]
 
-            rchanges [{:type :del-component
-                       :id id}]
-
-            uchanges [{:type :add-component
-                       :id id
-                       :name (:name component)
-                       :path (:path component)
-                       :shapes (vals (:objects component))}]]
-
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+        (rx/of (dch/commit-changes changes))))))
 
 (defn instantiate-component
   "Create a new shape in the current page, from the component with the given id
