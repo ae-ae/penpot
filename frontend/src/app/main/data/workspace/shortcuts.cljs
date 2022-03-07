@@ -361,8 +361,9 @@
                           :fn #(st/emit! (dw/toggle-focus-mode))}
    
    :thumbnail-set {:tooltip (ds/shift "T")
-                   :command (ds/c-mod "shift+t")
-                   :fn #(st/emit! (dw/toggle-thumbnail-selected))}})
+                   :command "shift+t"
+                   :fn #(st/emit! (dw/toggle-file-thumbnail-selected))}})
+
 
 (def opacity-shortcuts
   (into {} (->>

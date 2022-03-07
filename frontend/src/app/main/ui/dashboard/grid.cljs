@@ -36,14 +36,14 @@
 ;; --- Grid Item Thumbnail
 
 (def ^:const CACHE-NAME "penpot")
-(def ^:const CACHE-URL "https://penpot.app/cache/")
+(def ^:const CACHE-URL "http://localhost:3449/cache/")
+
 
 (defn use-thumbnail-cache
   "Creates some hooks to handle the files thumbnails cache"
   [file]
 
   (let [cache-url (str CACHE-URL (:id file) "/" (:revn file) ".svg")
-
         get-thumbnail
         (mf/use-callback
          (mf/deps cache-url)
@@ -51,6 +51,7 @@
            (p/let [response (.match js/caches cache-url)]
              (when (some? response)
                (p/let [blob         (.blob response)
+                       _ (print "===============>response" cache-url)
                        svg-content  (.text blob)
                        headers      (.-headers response)
                        fonts-header (or (.get headers "X-PENPOT-FONTS") "")

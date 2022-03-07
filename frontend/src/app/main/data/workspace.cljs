@@ -1061,13 +1061,28 @@
       (let [selected (wsh/lookup-selected state)]
         (rx/of (dch/update-shapes selected #(update % :blocked not)))))))
 
-(defn toggle-thumbnail-selected
+(defn toggle-file-thumbnail-selected
   []
-  (ptk/reify ::toggle-thumbnail-selected
+  (ptk/reify ::toggle-file-thumbnail-selected
     ptk/WatchEvent
     (watch [_ state _]
-      (let [selected (wsh/lookup-selected state)]
-        (rx/of (dch/update-shapes selected #(update % :thumbnail not)))))))
+      (let [selected (wsh/lookup-selected state)
+            pages (get-in state [:workspace-data
+                                 :pages-index])
+
+            extract-frames (fn [page-id]
+                             (let [objects (wsh/lookup-page-objects state page-id)]
+                               (cph/get-frames objects)))
+
+            frames-with-thumbnail (->> (keys pages)
+                                       (map extract-frames)
+                                       flatten
+                                       (filter (comp true? :file-thumbnail))
+                                       (map :id)
+                                       (remove #(some #{%} selected)))]
+
+        (rx/of (dch/update-shapes frames-with-thumbnail #(update % :file-thumbnail not))
+               (dch/update-shapes selected #(update % :file-thumbnail not)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Navigation
