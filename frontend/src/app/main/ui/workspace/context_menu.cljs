@@ -165,15 +165,20 @@
      [:& menu-separator]]))
 
 (mf/defc context-menu-thumbnail
-  []
-  (let [do-toggle-thumbnail (st/emitf (dw/flip-vertical-selected))]
-    [:*
-     [:& menu-entry {:title (tr "workspace.shape.menu.thumbnail-set")
-                     :shortcut (sc/get-tooltip :thumbnail-set)
-                     :on-click do-toggle-thumbnail}]
-     [:& menu-entry {:title (tr "workspace.shape.menu.thumbnail-remove")
-                     :on-click do-toggle-thumbnail}]
-     [:& menu-separator]]))
+  [{:keys [shapes]}]
+  (let [single?   (= (count shapes) 1)
+        has-frame? (->> shapes (d/seek #(= :frame (:type %))))        
+        is-frame? (and single? has-frame?)
+        do-toggle-thumbnail (st/emitf (dw/toggle-thumbnail-selected))]
+    (when is-frame?
+      [:*    
+      (if (every? :thumbnail shapes) 
+       [:& menu-entry {:title (tr "workspace.shape.menu.thumbnail-set")
+                       :shortcut (sc/get-tooltip :thumbnail-set)
+                       :on-click do-toggle-thumbnail}]
+       [:& menu-entry {:title (tr "workspace.shape.menu.thumbnail-remove")
+                       :on-click do-toggle-thumbnail}])
+       [:& menu-separator]])))
 
 (mf/defc context-menu-group
   [{:keys [shapes]}]

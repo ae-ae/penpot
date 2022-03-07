@@ -356,7 +356,6 @@
         shape     (obj/get props "shape")
         elem-name (obj/get child "type")
         render-id (mf/use-ctx muc/render-ctx)]
-    (.log js/console child)
     (cond
       (d/not-empty? (:strokes shape))
       [:*

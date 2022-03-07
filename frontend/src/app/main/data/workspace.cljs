@@ -1061,6 +1061,14 @@
       (let [selected (wsh/lookup-selected state)]
         (rx/of (dch/update-shapes selected #(update % :blocked not)))))))
 
+(defn toggle-thumbnail-selected
+  []
+  (ptk/reify ::toggle-thumbnail-selected
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [selected (wsh/lookup-selected state)]
+        (rx/of (dch/update-shapes selected #(update % :thumbnail not)))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Navigation
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
