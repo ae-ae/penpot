@@ -1079,7 +1079,9 @@
                                        flatten
                                        (filter (comp true? :file-thumbnail))
                                        (map :id)
-                                       (remove #(some #{%} selected)))]
+                                       (remove #(some #{%} selected)))
+            _ (println "selected " selected)
+            _ (println frames-with-thumbnail)]
 
         (rx/of (dch/update-shapes frames-with-thumbnail #(update % :file-thumbnail not))
                (dch/update-shapes selected #(update % :file-thumbnail not)))))))

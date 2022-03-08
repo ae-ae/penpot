@@ -252,6 +252,7 @@
 
 (declare strip-frames-with-thumbnails)
 (declare extract-file-thumbnail)
+(declare get-first-page-data)
 
 (s/def ::strip-frames-with-thumbnails ::us/boolean)
 
@@ -270,14 +271,10 @@
   [{:keys [pool] :as cfg} {:keys [profile-id file-id] :as props}]
   (check-read-permissions! pool profile-id file-id)
   (p/let [file    (retrieve-file cfg file-id)
-          page-id (get-in file [:data :pages 0])
-          data (cond-> (get-in file [:data :pages-index page-id])
-                 (true? (:strip-frames-with-thumbnails props))
-                 (strip-frames-with-thumbnails))
+          data (get-first-page-data file props)
           file-thumbnail (extract-file-thumbnail (get-in file [:data :pages-index]))]
 
-         (assoc data :file-thumbnail file-thumbnail)
-    ))
+    (assoc data :file-thumbnail file-thumbnail)))
 
 (sv/defmethod ::page
   "Retrieves the first page of the file. Used mainly for render
@@ -285,10 +282,16 @@
   [{:keys [pool] :as cfg} {:keys [profile-id file-id] :as props}]
   (check-read-permissions! pool profile-id file-id)
   (p/let [file    (retrieve-file cfg file-id)
-          page-id (get-in file [:data :pages 0])]
-    (cond-> (get-in file [:data :pages-index page-id])
-      (true? (:strip-frames-with-thumbnails props))
-      (strip-frames-with-thumbnails))))
+          data (get-first-page-data file props)]
+    data))
+
+(defn get-first-page-data
+  [file props]
+  (let [page-id (get-in file [:data :pages 0])
+        data (cond-> (get-in file [:data :pages-index page-id])
+               (true? (:strip-frames-with-thumbnails props))
+               (strip-frames-with-thumbnails))]
+    data))
 
 (defn strip-frames-with-thumbnails
   "Remove unnecesary shapes from frames that have thumbnail."
