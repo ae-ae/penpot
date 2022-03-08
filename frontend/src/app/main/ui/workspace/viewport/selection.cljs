@@ -9,7 +9,8 @@
   (:require
    [app.common.geom.matrix :as gmt]
    [app.common.geom.point :as gpt]
-   [app.common.geom.shapes :as geom]
+   [app.common.geom.shapes :as gsh]
+   [app.common.pages :as cp]
    [app.main.data.workspace :as dw]
    [app.main.refs :as refs]
    [app.main.store :as st]
@@ -33,7 +34,8 @@
 (def min-selrect-side 10)
 (def small-selrect-side 30)
 
-(mf/defc selection-rect [{:keys [transform rect zoom color on-move-selected on-context-menu]}]
+(mf/defc selection-rect
+  [{:keys [transform rect zoom color on-move-selected on-context-menu]}]
   (when rect
     (let [{:keys [x y width height]} rect]
       [:rect.main.viewport-selrect
@@ -117,10 +119,7 @@
       (when show-resize-point?
         {:type :resize-point
          :position :bottom-left
-         :props {:cx x :cy (+ y height) :align align}})
-
-
-      ]
+         :props {:cx x :cy (+ y height) :align align}})]
 
      (filterv (comp not nil?)))))
 
@@ -185,8 +184,7 @@
                  :style {:fill (if (debug? :resize-handler) "red" "none")
                          :stroke (if (debug? :resize-handler) "red" "none")
                          :stroke-width 0
-                         :cursor cursor}}]
-       )]))
+                         :cursor cursor}}])]))
 
 (mf/defc resize-side-handler
   "The side handler is always rendered horizontally and then rotated"
@@ -242,7 +240,7 @@
         current-transform (mf/deref refs/current-transform)
 
         selrect (:selrect shape)
-        transform (geom/transform-matrix shape {:no-flip true})
+        transform (gsh/transform-matrix shape {:no-flip true})
 
         rotation (-> (gpt/point 1 0)
                      (gpt/transform (:transform shape))
@@ -285,7 +283,7 @@
   (let [{:keys [x y width height]} shape]
     [:g.controls
      [:rect.main {:x x :y y
-                  :transform (geom/transform-matrix shape)
+                  :transform (gsh/transform-matrix shape)
                   :width width
                   :height height
                   :pointer-events "visible"
@@ -299,11 +297,9 @@
   (let [shape (mf/use-memo
                (mf/deps shapes)
                #(->> shapes
-                     (map geom/transform-shape)
-                     (geom/selection-rect)
-                     (geom/setup {:type :rect})))
-
-        shape-center (geom/center-shape shape)
+                     (map gsh/transform-shape)
+                     (gsh/selection-rect)
+                     (cp/setup-shape)))
 
         on-resize
         (fn [current-position _initial-position event]
@@ -328,15 +324,16 @@
                    :on-context-menu on-context-menu}]
 
      (when (debug? :selection-center)
-       [:circle {:cx (:x shape-center) :cy (:y shape-center) :r 5 :fill "yellow"}])]))
+       (let [shape-center (gsh/center-rect selection-rect)]
+         [:circle {:cx (:x shape-center) :cy (:y shape-center) :r 5 :fill "yellow"}]))]))
 
 (mf/defc single-selection-handlers
   [{:keys [shape zoom color disable-handlers on-move-selected on-context-menu] :as props}]
   (let [shape-id (:id shape)
-        shape (geom/transform-shape shape)
+        shape (gsh/transform-shape shape)
 
         shape' (if (debug? :simple-selection)
-                 (geom/setup {:type :rect} (geom/selection-rect [shape]))
+                 (cp/setup-shape (gsh/selection-rect [shape]))
                  shape)
 
         on-resize

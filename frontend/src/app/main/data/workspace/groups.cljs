@@ -77,7 +77,7 @@
 
         selrect   (gsh/selection-rect shapes)
         group     (-> (cp/make-minimal-group frame-id selrect gname)
-                      (gsh/setup selrect)
+                      (cp/setup-shape selrect)
                       (assoc :shapes (mapv :id shapes)))
 
         rchanges  [{:type :add-obj
