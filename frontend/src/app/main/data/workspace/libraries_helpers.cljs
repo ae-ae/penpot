@@ -191,7 +191,7 @@
 (defn generate-sync-file
   "Generate changes to synchronize all shapes in all pages of the given file,
   that use assets of the given type in the given library."
-  [file-id asset-type library-id state]
+  [changes file-id asset-type library-id state]
   (s/assert #{:colors :components :typographies} asset-type)
   (s/assert ::us/uuid file-id)
   (s/assert ::us/uuid library-id)
@@ -207,7 +207,8 @@
            uchanges []]
       (if-let [page (first pages)]
         (let [[page-rchanges page-uchanges]
-              (generate-sync-container asset-type
+              (generate-sync-container changes
+                                       asset-type
                                        library-id
                                        state
                                        (cph/make-container page :page))]
@@ -220,7 +221,7 @@
   "Generate changes to synchronize all shapes in all components of the
   local library of the given file, that use assets of the given type in
   the given library."
-  [file-id asset-type library-id state]
+  [changes file-id asset-type library-id state]
 
   (log/info :msg "Sync local components with library"
             :asset-type asset-type
@@ -233,7 +234,8 @@
            uchanges []]
       (if-let [local-component (first local-components)]
         (let [[comp-rchanges comp-uchanges]
-              (generate-sync-container asset-type
+              (generate-sync-container changes
+                                       asset-type
                                        library-id
                                        state
                                        (cph/make-container local-component :component))]
@@ -580,24 +582,48 @@
           clear-remote-synced? (and initial-root? reset?)
           set-remote-synced?   (and (not initial-root?) reset?)
 
-          [rchanges uchanges]
-          (concat-changes
-           (update-attrs shape-inst
-                         shape-main
-                         root-inst
-                         root-main
-                         container
-                         omit-touched?)
-           (when reset?
-             (change-touched shape-inst
-                             shape-main
-                             container
-                             {:reset-touched? true}))
-           (when clear-remote-synced?
-             (change-remote-synced shape-inst container nil))
+          changes (cond-> changes
+                    :always
+                    (update-attrs shape-inst
+                                  shape-main
+                                  root-inst
+                                  root-main
+                                  container
+                                  omit-touched?)
 
-           (when set-remote-synced?
-             (change-remote-synced shape-inst container true)))
+                    reset?
+                    (change-touched shape-main
+                                    container
+                                    {:reset-touched? true})
+
+                    clear-remote-synced?
+                    (change-remote-synced shape-inst
+                                          container
+                                          nil)
+
+                    set-remote-synced?
+                    (change-remote-synced shape-inst
+                                          container
+                                          true))
+
+          ;; [rchanges uchanges]
+          ;; (concat-changes
+          ;;  (update-attrs shape-inst
+          ;;                shape-main
+          ;;                root-inst
+          ;;                root-main
+          ;;                container
+          ;;                omit-touched?)
+          ;;  (when reset?
+          ;;    (change-touched shape-inst
+          ;;                    shape-main
+          ;;                    container
+          ;;                    {:reset-touched? true}))
+          ;;  (when clear-remote-synced?
+          ;;    (change-remote-synced shape-inst container nil))
+          ;;
+          ;;  (when set-remote-synced?
+          ;;    (change-remote-synced shape-inst container true)))
 
           children-inst   (mapv #(cph/get-shape container %)
                                 (:shapes shape-inst))
@@ -1117,7 +1143,7 @@
 
   If omit-touched? is true, attributes whose group has been touched
   in the destination shape will not be copied."
-  [dest-shape origin-shape dest-root origin-root container omit-touched?]
+  [changes dest-shape origin-shape dest-root origin-root container omit-touched?]
 
   (log/info :msg (str "SYNC "
                       (:name origin-shape)
@@ -1141,29 +1167,53 @@
 
       (let [attr (first attrs)]
         (if (nil? attr)
-          (let [all-parents (cph/get-parent-ids (:objects container)
-                                                (:id dest-shape))
-                rchanges [(make-change
-                            container
-                            {:type :mod-obj
-                             :id (:id dest-shape)
-                             :operations roperations})
-                          (make-change
-                            container
-                            {:type :reg-objects
-                             :shapes all-parents})]
-                uchanges [(make-change
-                            container
-                            {:type :mod-obj
-                             :id (:id dest-shape)
-                             :operations uoperations})
-                          (make-change
-                            container
-                            {:type :reg-objects
-                             :shapes all-parents})]]
-            (if (seq roperations)
-              [rchanges uchanges]
-              empty-changes))
+          (if (empty? roperations)
+            changes
+            (let [all-parents (cph/get-parent-ids (:objects container)
+                                                  (:id dest-shape))]
+              (-> changes
+                  (update :redo-changes conj (make-change
+                                               container
+                                               {:type :mod-obj
+                                                :id (:id dest-shape)
+                                                :operations roperations}))
+                  (update :redo-changes conj (make-change
+                                               container
+                                               {:type :reg-objects
+                                                :shapes all-parents}))
+                  (update :undo-changes conj (make-change
+                                               container
+                                               {:type :mod-obj
+                                                :id (:id dest-shape)
+                                                :operations uoperations}))
+                  (update :undo-changes conj (make-change
+                                               container
+                                               {:type :reg-objects
+                                                :shapes all-parents})))))
+
+          ;; (let [all-parents (cph/get-parent-ids (:objects container)
+          ;;                                       (:id dest-shape))
+          ;;       rchanges [(make-change
+          ;;                   container
+          ;;                   {:type :mod-obj
+          ;;                    :id (:id dest-shape)
+          ;;                    :operations roperations})
+          ;;                 (make-change
+          ;;                   container
+          ;;                   {:type :reg-objects
+          ;;                    :shapes all-parents})]
+          ;;       uchanges [(make-change
+          ;;                   container
+          ;;                   {:type :mod-obj
+          ;;                    :id (:id dest-shape)
+          ;;                    :operations uoperations})
+          ;;                 (make-change
+          ;;                   container
+          ;;                   {:type :reg-objects
+          ;;                    :shapes all-parents})]]
+          ;;   (if (seq roperations)
+          ;;     [rchanges uchanges]
+          ;;     empty-changes))
 
           (let [roperation {:type :set
                             :attr attr

@@ -35,7 +35,7 @@
    [potok.core :as ptk]))
 
 ;; Change this to :info :debug or :trace to debug this module, or :warn to reset to default
-(log/set-level! :warn)
+(log/set-level! :debug)
 
 (defn- log-changes
   [changes file]
@@ -253,7 +253,6 @@
         (when-not (empty? shapes)
           (let [[group changes]
                 (dwlh/generate-add-component it shapes objects page-id file-id)]
-            (js/console.log "changes" (clj->js changes))
             (when-not (empty? (:redo-changes changes))
               (rx/of (dch/commit-changes changes)
                      (dwc/select-shapes (d/ordered-set (:id group)))))))))))
@@ -494,6 +493,7 @@
             (-> (pcb/empty-changes it)
                 (pcb/with-container container)
                 (dwlh/generate-sync-shape-direct libraries container id true))]
+        (js/console.log "changes" (clj->js changes))
 
         (log/debug :msg "RESET-COMPONENT finished" :js/rchanges (log-changes
                                                                  (:redo-changes changes)
@@ -613,33 +613,36 @@
                 :file (dwlh/pretty-file file-id state)
                 :library (dwlh/pretty-file library-id state))
       (let [file            (dwlh/get-file state file-id)
-            library-changes [(dwlh/generate-sync-library file-id :components library-id state)
-                             (dwlh/generate-sync-library file-id :colors library-id state)
-                             (dwlh/generate-sync-library file-id :typographies library-id state)]
-            file-changes    [(dwlh/generate-sync-file file-id :components library-id state)
-                             (dwlh/generate-sync-file file-id :colors library-id state)
-                             (dwlh/generate-sync-file file-id :typographies library-id state)]
 
-            xf-fcat  (comp (remove nil?) (map first) (mapcat identity))
-            rchanges (d/concat-vec
-                      (sequence xf-fcat library-changes)
-                      (sequence xf-fcat file-changes))
+            changes         (-> (pcb/empty-changes it))
+            library-changes (-> changes
+                                (dwlh/generate-sync-library file-id :components library-id state)
+                                (dwlh/generate-sync-library file-id :colors library-id state)
+                                (dwlh/generate-sync-library file-id :typographies library-id state))
+            file-changes    (-> library-changes
+                                (dwlh/generate-sync-file file-id :components library-id state)
+                                (dwlh/generate-sync-file file-id :colors library-id state)
+                                (dwlh/generate-sync-file file-id :typographies library-id state))
 
-            xf-scat  (comp (remove nil?) (map second) (mapcat identity))
-            uchanges (d/concat-vec
-                      (sequence xf-scat library-changes)
-                      (sequence xf-scat file-changes))]
+            ;; xf-fcat  (comp (remove nil?) (map first) (mapcat identity))
+            ;; rchanges (d/concat-vec
+            ;;           (sequence xf-fcat library-changes)
+            ;;           (sequence xf-fcat file-changes))
+            ;;
+            ;; xf-scat  (comp (remove nil?) (map second) (mapcat identity))
+            ;; uchanges (d/concat-vec
+            ;;           (sequence xf-scat library-changes)
+            ;;           (sequence xf-scat file-changes))
+            ]
 
         (log/debug :msg "SYNC-FILE finished" :js/rchanges (log-changes
-                                                           rchanges
+                                                           (:redo-changes changes)
                                                            file))
         (rx/concat
          (rx/of (dm/hide-tag :sync-dialog))
-         (when rchanges
-           (rx/of (dch/commit-changes {:redo-changes rchanges
-                                       :undo-changes uchanges
-                                       :origin it
-                                       :file-id file-id})))
+         (when (seq (:redo-changes changes))
+           (rx/of (dch/commit-changes (assoc changes ;; TODO a ver qué pasa con esto
+                                             :file-id file-id))))
          (when (not= file-id library-id)
             ;; When we have just updated the library file, give some time for the
             ;; update to finish, before marking this file as synced.
@@ -651,7 +654,7 @@
                       (rp/mutation :update-sync
                                    {:file-id file-id
                                     :library-id library-id})))
-         (when (some? library-changes)
+         (when (seq (:redo-changes library-changes))
            (rx/of (sync-file-2nd-stage file-id library-id))))))))
 
 (defn sync-file-2nd-stage
@@ -673,10 +676,16 @@
                 :file (dwlh/pretty-file file-id state)
                 :library (dwlh/pretty-file library-id state))
       (let [file                  (dwlh/get-file state file-id)
-            [rchanges1 uchanges1] (dwlh/generate-sync-file file-id :components library-id state)
-            [rchanges2 uchanges2] (dwlh/generate-sync-library file-id :components library-id state)
-            rchanges              (d/concat-vec rchanges1 rchanges2)
-            uchanges              (d/concat-vec uchanges1 uchanges2)]
+            changes1 (-> (pcb/empty-changes it)
+                         (dwlh/generate-sync-file file-id :components library-id state))
+            changes2 (-> changes1
+                         (dwlh/generate-sync-library file-id :components library-id state))
+            [rchanges uchanges] [[] []]
+            ;; [rchanges1 uchanges1] (dwlh/generate-sync-file file-id :components library-id state)
+            ;; [rchanges2 uchanges2] (dwlh/generate-sync-library file-id :components library-id state)
+            ;; rchanges              (d/concat-vec rchanges1 rchanges2)
+            ;; uchanges              (d/concat-vec uchanges1 uchanges2)
+            ]
         (when rchanges
           (log/debug :msg "SYNC-FILE (2nd stage) finished" :js/rchanges (log-changes
                                                                          rchanges
