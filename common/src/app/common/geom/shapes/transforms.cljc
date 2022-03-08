@@ -55,6 +55,7 @@
         dy       (d/check-num dy 0)
         move-vec (gpt/point dx dy)]
 
+    ;; TODO: SELRECT, POINTS
     (-> shape
         (update :selrect move-selrect move-vec)
         (update :points move-points move-vec)
@@ -283,6 +284,7 @@
         modif-rotation (or (get-in shape [:modifiers :rotation]) 0)
         rotation       (mod (+ base-rotation modif-rotation) 360)]
 
+    ;; TODO: SELRECT, POINTS
     (-> shape
         (cond-> bool?
           (update :bool-content gpa/transform-content transform-mtx))
@@ -336,6 +338,7 @@
         new-selrect (gpr/points->selrect base-points)]
 
     ;; Updates the shape and the applytransform-rect will update the other properties
+    ;; TODO: SELRECT, POINTS
     (-> group
         (update-group-viewbox new-selrect)
         (assoc :selrect new-selrect)

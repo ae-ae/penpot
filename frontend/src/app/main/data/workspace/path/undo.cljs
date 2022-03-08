@@ -37,6 +37,7 @@
 (defn- load-entry [state {:keys [content selrect points preview last-point prev-handler]}]
   (let [id (st/get-path-id state)
         old-content (st/get-path state :content)]
+    ;; TODO: SELRECT, POINTS
     (-> state
         (d/assoc-in-when (st/get-path-location state :content) content)
         (d/assoc-in-when (st/get-path-location state :selrect) selrect)

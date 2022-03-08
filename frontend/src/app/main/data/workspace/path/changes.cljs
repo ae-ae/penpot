@@ -42,6 +42,7 @@
                 :page-id page-id
                 :shapes [shape-id]}]
 
+              ;; TODO: SELRECT, POINTS
               :else
               [{:type :mod-obj
                 :id shape-id
@@ -70,6 +71,7 @@
                 :page-id page-id
                 :shapes [shape-id]}]
 
+              ;; TODO: SELRECT, POINTS
               :else
               [{:type :mod-obj
                 :id shape-id

@@ -167,6 +167,7 @@
               (->> (sequence xform shapes)
                    (reduce update-fn objects))))
 
+          ;; TODO: SELRECT, POINTS
           (set-mask-selrect [group children]
             (let [mask (first children)]
               (-> group

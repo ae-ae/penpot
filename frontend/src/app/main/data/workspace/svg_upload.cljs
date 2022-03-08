@@ -211,6 +211,7 @@
           points (gsh/rect->points selrect)
 
           origin (gpt/negate (gpt/point svg-data))]
+      ;; TODO: SELRECT, POINTS
       (-> {:id (uuid/next)
            :type :path
            :name name
@@ -235,6 +236,7 @@
         [shape-transform shape-transform-inv rotation]
         (gsh/calculate-adjust-matrix points rect-points (neg? (:a transform)) (neg? (:d transform)))]
 
+    ;; TODO: SELRECT, POINTS
     (merge rect-shape
            {:selrect selrect
             :points points

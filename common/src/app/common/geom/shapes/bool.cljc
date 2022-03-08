@@ -33,6 +33,7 @@
         shape            (assoc shape :bool-content bool-content)
         [points selrect] (gsp/content->points+selrect shape bool-content)]
 
+    ;; TODO: SELRECT, POINTS
     (if (and (some? selrect) (d/not-empty? points))
       (-> shape
           (assoc :selrect selrect)

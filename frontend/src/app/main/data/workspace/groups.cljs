@@ -269,6 +269,7 @@
                                           {:type :set
                                            :attr :constraints-v
                                            :val :scale}]})
+                          ;; TODO: SELRECT, POINTS
                           [{:type :mod-obj
                             :page-id page-id
                             :id (:id group)

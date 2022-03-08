@@ -153,6 +153,7 @@
   [shape]
   (let [selrect (gsh/rect->selrect shape)
         points  (gsh/rect->points shape)]
+    ;; TODO: SELRECT, POINTS
     (-> shape
         (assoc :selrect selrect
                :points points))))

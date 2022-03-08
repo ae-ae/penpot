@@ -336,6 +336,7 @@
                   [])]
      (gpr/points->selrect points))))
 
+;; TODO: SELRECT
 (defn content->selrect [content]
   (let [calc-extremities
         (fn [command prev]

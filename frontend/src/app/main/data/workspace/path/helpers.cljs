@@ -70,6 +70,7 @@
   "Updates the selrect and points for a path"
   [shape]
   (let [[points selrect] (content->points+selrect shape (:content shape))]
+    ;; TODO: SELRECT, POINTS
     (assoc shape :points points :selrect selrect)))
 
 (defn closest-angle

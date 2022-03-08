@@ -32,6 +32,7 @@
         content (gsp/segments->content segments)
         selrect (gsh/content->selrect content)
         points (gsh/rect->points selrect)]
+    ;; TODO: SELRECT, POINTS
     (-> state
         (update-in [:workspace-drawing :object] assoc
                    :segments segments
@@ -55,6 +56,7 @@
   (let [content (gsp/segments->content segments)
         selrect (gsh/content->selrect content)
         points (gsh/rect->points selrect)]
+    ;; TODO: SELRECT, POINTS
     (-> shape
         (dissoc :segments)
         (assoc :content content)
