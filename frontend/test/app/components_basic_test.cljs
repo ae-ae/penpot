@@ -334,8 +334,8 @@
          component-id (:component-id instance1)]
 
      (->> state
-          (the/do-watch-update (dwl/detach-component
-                                (:id instance1)))
+          (the/do-watch-update (dwl/detach-components
+                                [(:id instance1)]))
           (rx/do
             (fn [new-state]
               (let [[instance1 shape1]

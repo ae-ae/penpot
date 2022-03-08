@@ -34,8 +34,13 @@
   [changes page]
   (vary-meta changes assoc
              ::page page
-             ::page-id (:id page)
-             ::objects (:objects page)))
+             ::page-id (:id page)))
+
+(defn with-container
+  [changes container]
+  (if (cph/page? container)
+    (vary-meta changes assoc ::page-id (:id container))
+    (vary-meta changes assoc ::component-id (:id container))))
 
 (defn with-objects
   [changes objects]
@@ -60,9 +65,16 @@
   [changes f]
   (update changes :redo-changes #(mapv f %)))
 
+; TODO: remove this when not needed
 (defn- assert-page-id
   [changes]
   (assert (contains? (meta changes) ::page-id) "Give a page-id or call (with-page) before using this function"))
+
+(defn- assert-container-id
+  [changes]
+  (assert (or (contains? (meta changes) ::page-id)
+              (contains? (meta changes) ::component-id))
+          "Give a page-id or call (with-container) before using this function"))
 
 (defn- assert-page
   [changes]
@@ -147,9 +159,9 @@
 
 ;; Shape tree changes
 
-(defn add-obj
+(defn add-object
   ([changes obj]
-   (add-obj changes obj nil))
+   (add-object changes obj nil))
 
   ([changes obj {:keys [index ignore-touched] :or {index ::undefined ignore-touched false}}]
    (assert-page-id changes)
@@ -217,9 +229,11 @@
    (update-shapes changes ids update-fn nil))
 
   ([changes ids update-fn {:keys [attrs ignore-geometry?] :or {attrs nil ignore-geometry? false}}]
-   (assert-page-id changes)
+   (assert-container-id changes)
    (assert-objects changes)
-   (let [objects (-> changes meta ::file-data (get-in [:pages-index uuid/zero :objects]))
+   (let [page-id      (::page-id (meta changes))
+         component-id (::component-id (meta changes))
+         objects      (-> changes meta ::file-data (get-in [:pages-index uuid/zero :objects]))
 
          generate-operation
          (fn [operations attr old new ignore-geometry?]
@@ -247,9 +261,14 @@
                         (seq uops)
                         (conj {:type :set-touched :touched (:touched old-obj)}))
 
-                 change {:type :mod-obj
-                         :page-id (::page-id (meta changes))
-                         :id id}]
+                 change (cond-> {:type :mod-obj
+                                 :id id}
+
+                          (some? page-id)
+                          (assoc :page-id page-id)
+
+                          (some? component-id)
+                          (assoc :component-id component-id))]
 
              (cond-> changes
                (seq rops)

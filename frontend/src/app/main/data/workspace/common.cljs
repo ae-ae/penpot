@@ -323,7 +323,7 @@
                      selected)
 
              changes  (-> (pcb/empty-changes it page-id)
-                          (pcb/add-obj shape))]
+                          (pcb/add-object shape))]
 
          (rx/concat
           (rx/of (dch/commit-changes changes)

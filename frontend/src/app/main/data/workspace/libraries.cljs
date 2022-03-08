@@ -398,26 +398,11 @@
                               (get component :objects)
                               update-new-shape)
 
-            rchanges (mapv (fn [obj]
-                             {:type :add-obj
-                              :id (:id obj)
-                              :page-id page-id
-                              :frame-id (:frame-id obj)
-                              :parent-id (:parent-id obj)
-                              :ignore-touched true
-                              :obj obj})
-                           new-shapes)
+            changes (reduce #(pcb/add-object %1 %2 {:ignore-touched true})
+                            (pcb/empty-changes it page-id)
+                            new-shapes)]
 
-            uchanges (mapv (fn [obj]
-                             {:type :del-obj
-                              :id (:id obj)
-                              :page-id page-id
-                              :ignore-touched true})
-                           new-shapes)]
-
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it})
+        (rx/of (dch/commit-changes changes)
                (dwc/select-shapes (d/ordered-set (:id new-shape))))))))
 
 (defn detach-component
@@ -432,12 +417,12 @@
             page-id   (get state :current-page-id)
             container (cph/get-container file :page page-id)
 
-            [rchanges uchanges]
-            (dwlh/generate-detach-instance container id)]
+            changes   (-> (pcb/empty-changes it)
+                          (pcb/with-container container)
+                          (pcb/with-objects (:objects container))
+                          (dwlh/generate-detach-instance container id))]
 
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+        (rx/of (dch/commit-changes changes))))))
 
 (def detach-selected-components
   (ptk/reify ::detach-selected-components
@@ -451,17 +436,15 @@
                            (wsh/lookup-selected)
                            (cph/clean-loops objects))
 
-            [rchanges uchanges]
-            (reduce (fn [changes id]
-                      (dwlh/concat-changes
-                       changes
-                       (dwlh/generate-detach-instance container id)))
-                    dwlh/empty-changes
-                    selected)]
+            changes (reduce
+                      (fn [changes id]
+                        (dwlh/generate-detach-instance changes container id))
+                      (-> (pcb/empty-changes it)
+                          (pcb/with-container container)
+                          (pcb/with-objects objects))
+                      selected)]
 
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+        (rx/of (dch/commit-changes changes))))))
 
 (defn nav-to-component-file
   [file-id]
@@ -507,15 +490,15 @@
             page-id   (:current-page-id state)
             container (cph/get-container file :page page-id)
 
-            [rchanges uchanges]
-            (dwlh/generate-sync-shape-direct libraries container id true)]
+            changes
+            (-> (pcb/empty-changes it)
+                (pcb/with-container container)
+                (dwlh/generate-sync-shape-direct libraries container id true))]
 
         (log/debug :msg "RESET-COMPONENT finished" :js/rchanges (log-changes
-                                                                 rchanges
+                                                                 (:redo-changes changes)
                                                                  file))
-        (rx/of (dch/commit-changes {:redo-changes rchanges
-                                    :undo-changes uchanges
-                                    :origin it}))))))
+        (rx/of (dch/commit-changes changes))))))
 
 (defn update-component
   "Modify the component linked to the shape with the given id, in the
@@ -540,8 +523,11 @@
             container     (cph/get-container local-file :page page-id)
             shape         (cph/get-shape container id)
 
-            [rchanges uchanges]
-            (dwlh/generate-sync-shape-inverse libraries container id)
+            [rchanges uchanges][[] []] ;; %%%%%%%%%
+            changes
+            (-> (pcb/empty-changes it)
+                (pcb/with-container container)
+                (dwlh/generate-sync-shape-inverse libraries container id))
 
             file-id   (:component-file shape)
             file      (dwlh/get-file state file-id)

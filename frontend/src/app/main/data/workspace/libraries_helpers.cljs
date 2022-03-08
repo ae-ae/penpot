@@ -148,8 +148,7 @@
           [new-shape new-shapes updated-shapes]
           (make-component-shape group objects file-id)
 
-          changes (-> (pcb/empty-changes it page-id)
-                      (pcb/with-objects objects)
+          changes (-> changes
                       (pcb/add-component (:id new-shape)
                                          path
                                          name
@@ -170,61 +169,22 @@
 (defn generate-detach-instance
   "Generate changes to remove the links between a shape and all its children
   with a component."
-  [container shape-id]
+  [changes container shape-id]
   (log/debug :msg "Detach instance" :shape-id shape-id :container (:id container))
-  (let [shapes   (cph/get-children-with-self (:objects container) shape-id)
-        rchanges (mapv (fn [obj]
-                         (make-change
-                           container
-                           {:type :mod-obj
-                            :id (:id obj)
-                            :operations [{:type :set
-                                          :attr :component-id
-                                          :val nil}
-                                         {:type :set
-                                          :attr :component-file
-                                          :val nil}
-                                         {:type :set
-                                          :attr :component-root?
-                                          :val nil}
-                                         {:type :set
-                                          :attr :remote-synced?
-                                          :val nil}
-                                         {:type :set
-                                          :attr :shape-ref
-                                          :val nil}
-                                         {:type :set
-                                          :attr :touched
-                                          :val nil}]}))
-                       shapes)
+  (let [shapes  (->> (cph/get-children-with-self (:objects container) shape-id)
+                     (map :id))
 
-        uchanges (mapv (fn [obj]
-                         (make-change
-                           container
-                           {:type :mod-obj
-                            :id (:id obj)
-                            :operations [{:type :set
-                                          :attr :component-id
-                                          :val (:component-id obj)}
-                                         {:type :set
-                                          :attr :component-file
-                                          :val (:component-file obj)}
-                                         {:type :set
-                                          :attr :component-root?
-                                          :val (:component-root? obj)}
-                                         {:type :set
-                                          :attr :remote-synced?
-                                          :val (:remote-synced? obj)}
-                                         {:type :set
-                                          :attr :shape-ref
-                                          :val (:shape-ref obj)}
-                                         {:type :set
-                                          :attr :touched
-                                          :val (:touched obj)}]}))
-                       shapes)]
+        update-fn
+        (fn [shape]
+          (assoc shape
+                 :component-id nil
+                 :component-file nil
+                 :component-root? nil
+                 :remote-synced? nil
+                 :shape-ref nil
+                 :touched nil))]
 
-    [rchanges uchanges]))
-
+    (pcb/update-shapes changes shapes update-fn)))
 
 ;; ---- General library synchronization functions ----
 
@@ -285,7 +245,7 @@
 (defn- generate-sync-container
   "Generate changes to synchronize all shapes in a particular container (a page
   or a component) that use assets of the given type in the given library."
-  [asset-type library-id state container]
+  [changes asset-type library-id state container]
 
   (if (cph/page? container)
     (log/debug :msg "Sync page in local file" :page-id (:id container))
@@ -299,7 +259,8 @@
            uchanges []]
       (if-let [shape (first shapes)]
         (let [[shape-rchanges shape-uchanges]
-              (generate-sync-shape asset-type
+              (generate-sync-shape changes
+                                   asset-type
                                    library-id
                                    state
                                    container
@@ -351,16 +312,16 @@
 (defmulti generate-sync-shape
   "Generate changes to synchronize one shape with all assets of the given type
   that is using, in the given library."
-  (fn [type _library-id _state _container _shape] type))
+  (fn [type _changes _library-id _state _container _shape] type))
 
 (defmethod generate-sync-shape :components
-  [_ _ state container shape]
+  [_ changes _library-id state container shape]
   (let [shape-id  (:id shape)
         libraries (get-libraries state)]
-    (generate-sync-shape-direct libraries container shape-id false)))
+    (generate-sync-shape-direct changes libraries container shape-id false)))
 
 (defn- generate-sync-text-shape
-  [shape container update-node]
+  [changes shape container update-node]
   (let [old-content (:content shape)
         new-content (txt/transform-nodes update-node old-content)
         rchanges [(make-change
@@ -383,7 +344,7 @@
       [rchanges uchanges])))
 
 (defmethod generate-sync-shape :colors
-  [_ library-id state container shape]
+  [_ changes library-id state container shape]
   (log/debug :msg "Sync colors of shape" :shape (:name shape))
 
   ;; Synchronize a shape that uses some colors of the library. The value of the
@@ -399,7 +360,7 @@
                             (assoc node
                                    :fill-color-ref-id nil
                                    :fill-color-ref-file nil)))]
-        (generate-sync-text-shape shape container update-node))
+        (generate-sync-text-shape changes shape container update-node))
       (loop [attrs       (seq color-sync-attrs)
              roperations []
              uoperations []]
@@ -456,7 +417,7 @@
                        (into uoperations uoperations'))))))))))
 
 (defmethod generate-sync-shape :typographies
-  [_ library-id state container shape]
+  [_ changes library-id state container shape]
   (log/debug :msg "Sync typographies of shape" :shape (:name shape))
 
   ;; Synchronize a shape that uses some typographies of the library. The attributes
@@ -467,7 +428,7 @@
                         (merge node (dissoc typography :name :id))
                         (dissoc node :typography-ref-id
                                      :typography-ref-file)))]
-    (generate-sync-text-shape shape container update-node)))
+    (generate-sync-text-shape changes shape container update-node)))
 
 (defn- get-assets
   [library-id asset-type state]
@@ -579,7 +540,7 @@
 (defn generate-sync-shape-direct
   "Generate changes to synchronize one shape that the root of a component
   instance, and all its children, from the given component."
-  [libraries container shape-id reset?]
+  [changes libraries container shape-id reset?]
   (log/debug :msg "Sync shape direct" :shape (str shape-id) :reset? reset?)
   (let [shape-inst    (cph/get-shape container shape-id)
         component     (cph/get-component libraries
@@ -593,7 +554,8 @@
         root-main     (cph/get-component-root component)]
 
     (if component
-      (generate-sync-shape-direct-recursive container
+      (generate-sync-shape-direct-recursive changes
+                                            container
                                             shape-inst
                                             component
                                             shape-main
@@ -603,17 +565,17 @@
                                             initial-root?)
       ; If the component is not found, because the master component has been
       ; deleted or the library unlinked, detach the instance.
-      (generate-detach-instance shape-id container))))
+      (generate-detach-instance changes shape-id container))))
 
 (defn- generate-sync-shape-direct-recursive
-  [container shape-inst component shape-main root-inst root-main reset? initial-root?]
+  [changes container shape-inst component shape-main root-inst root-main reset? initial-root?]
   (log/debug :msg "Sync shape direct recursive"
              :shape (str (:name shape-inst))
              :component (:name component))
 
   (if (nil? shape-main)
     ;; This should not occur, but protect against it in any case
-    (generate-detach-instance (:id shape-inst) container)
+    (generate-detach-instance changes (:id shape-inst) container)
     (let [omit-touched?        (not reset?)
           clear-remote-synced? (and initial-root? reset?)
           set-remote-synced?   (and (not initial-root?) reset?)
@@ -665,7 +627,8 @@
                                                set-remote-synced?)))
 
           both (fn [child-inst child-main]
-                 (generate-sync-shape-direct-recursive container
+                 (generate-sync-shape-direct-recursive changes
+                                                       container
                                                        child-inst
                                                        component
                                                        child-main
@@ -697,7 +660,7 @@
 (defn generate-sync-shape-inverse
   "Generate changes to update the component a shape is linked to, from
   the values in the shape and all its children."
-  [libraries container shape-id]
+  [changes libraries container shape-id]
   (log/debug :msg "Sync shape inverse" :shape (str shape-id))
   (let [shape-inst    (cph/get-shape container shape-id)
         component     (cph/get-component libraries
@@ -711,7 +674,8 @@
         root-main     (cph/get-component-root component)]
 
     (if component
-      (generate-sync-shape-inverse-recursive container
+      (generate-sync-shape-inverse-recursive changes
+                                             container
                                              shape-inst
                                              component
                                              shape-main
@@ -721,7 +685,7 @@
       empty-changes)))
 
 (defn- generate-sync-shape-inverse-recursive
-  [container shape-inst component shape-main root-inst root-main initial-root?]
+  [changes container shape-inst component shape-main root-inst root-main initial-root?]
   (log/trace :msg "Sync shape inverse recursive"
              :shape (str (:name shape-inst))
              :component (:name component))
@@ -777,7 +741,8 @@
                                     false))
 
           both (fn [child-inst child-main]
-                 (generate-sync-shape-inverse-recursive container
+                 (generate-sync-shape-inverse-recursive changes
+                                                        container
                                                         child-inst
                                                         component
                                                         child-main
