@@ -6,6 +6,8 @@
 
 (ns app.rpc.queries.files
   (:require
+   [app.common.logging :as l]
+
    [app.common.data :as d]
    [app.common.pages.helpers :as cph]
    [app.common.pages.migrations :as pmg]
@@ -249,12 +251,33 @@
         (update :data assoc :pages [page-id]))))
 
 (declare strip-frames-with-thumbnails)
+(declare extract-file-thumbnail)
 
 (s/def ::strip-frames-with-thumbnails ::us/boolean)
 
 (s/def ::page
   (s/keys :req-un [::profile-id ::file-id]
           :opt-un [::strip-frames-with-thumbnails]))
+
+(s/def ::file-thumbnail
+  (s/keys :req-un [::profile-id ::file-id]
+          :opt-un [::strip-frames-with-thumbnails]))
+
+
+(sv/defmethod ::file-thumbnail
+  "Retrieves the first page of the file. Used mainly for render
+  thumbnails on dashboard."
+  [{:keys [pool] :as cfg} {:keys [profile-id file-id] :as props}]
+  (check-read-permissions! pool profile-id file-id)
+  (p/let [file    (retrieve-file cfg file-id)
+          page-id (get-in file [:data :pages 0])
+          data (cond-> (get-in file [:data :pages-index page-id])
+                 (true? (:strip-frames-with-thumbnails props))
+                 (strip-frames-with-thumbnails))
+          file-thumbnail (extract-file-thumbnail (get-in file [:data :pages-index]))]
+
+         (assoc data :file-thumbnail file-thumbnail)
+    ))
 
 (sv/defmethod ::page
   "Retrieves the first page of the file. Used mainly for render
@@ -293,6 +316,19 @@
                 objects))]
 
     (update data :objects update-objects)))
+
+
+(defn extract-file-thumbnail
+  "Extract the frame marked as file-thumbnail"
+  [pages]
+  (->> pages
+       vals
+       (map :objects)
+       flatten
+       (map vals)
+       flatten
+       (filter :file-thumbnail)
+       first))
 
 
 ;; --- Query: Shared Library Files

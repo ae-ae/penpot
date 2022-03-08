@@ -51,7 +51,6 @@
            (p/let [response (.match js/caches cache-url)]
              (when (some? response)
                (p/let [blob         (.blob response)
-                       _ (print "===============>response" cache-url)
                        svg-content  (.text blob)
                        headers      (.-headers response)
                        fonts-header (or (.get headers "X-PENPOT-FONTS") "")
@@ -84,14 +83,12 @@
                (if (some? thumb-data)
                  (rx/of thumb-data)
                  (->> (wrk/ask! {:cmd :thumbnails/generate
-                                 :file-id (:id file)
-                                 :page-id (get-in file [:data :pages 0])})
+                                 :file-id (:id file)})
                       (rx/tap cache-thumbnail)))))
 
             ;; If we have a problem we delegate to the thumbnail generation
             (rx/catch #(wrk/ask! {:cmd :thumbnails/generate
-                                  :file-id (:id file)
-                                  :page-id (get-in file [:data :pages 0])})))))))
+                                  :file-id (:id file)})))))))
 
 (mf/defc grid-item-thumbnail
   {::mf/wrap [mf/memo]}
