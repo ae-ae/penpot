@@ -71,9 +71,10 @@
       (update :undo-changes conj (assoc change :operations uops)))))
 
 (defn update-shapes
-  ([ids f] (update-shapes ids f nil))
-  ([ids f {:keys [reg-objects? save-undo? attrs ignore-tree]
-           :or {reg-objects? false save-undo? true attrs nil}}]
+  ([ids f] (update-shapes ids f nil nil))
+  ([ids f keys] (update-shapes ids f nil keys))
+  ([ids f page-id {:keys [reg-objects? save-undo? attrs ignore-tree]
+                   :or {reg-objects? false save-undo? true attrs nil}}]
 
    (us/assert ::coll-of-uuid ids)
    (us/assert fn? f)
@@ -81,7 +82,7 @@
    (ptk/reify ::update-shapes
      ptk/WatchEvent
      (watch [it state _]
-       (let [page-id   (:current-page-id state)
+       (let [page-id   (or page-id (:current-page-id state))
              objects   (wsh/lookup-page-objects state)
              changes   {:redo-changes []
                         :undo-changes []
@@ -91,9 +92,11 @@
              ids       (into [] (filter some?) ids)
 
              changes   (reduce
-                         #(update-shape-changes %1 page-id objects f attrs %2 (get ignore-tree %2))
-                         changes ids)]
+                        #(update-shape-changes %1 page-id objects f attrs %2 (get ignore-tree %2))
+                        changes ids)]
 
+         (when-not (empty? (:redo-changes changes))
+           (print "update-shapes page" page-id "ids" ids))
          (when-not (empty? (:redo-changes changes))
            (let [reg-objs {:type :reg-objects
                            :page-id page-id

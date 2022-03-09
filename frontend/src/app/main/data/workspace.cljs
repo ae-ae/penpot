@@ -1061,6 +1061,20 @@
       (let [selected (wsh/lookup-selected state)]
         (rx/of (dch/update-shapes selected #(update % :blocked not)))))))
 
+(defn extract-file-thumbnails-from-page
+  [state selected page]
+  (let [extract-frames (fn [page-id]
+                         (let [objects (wsh/lookup-page-objects state page-id)]
+                           (cph/get-frames objects)))
+        page-id (key page)
+        frames-with-thumbnail (->> (extract-frames page-id)
+                                   (filter (comp true? :file-thumbnail))
+                                   (map :id)
+                                   (remove #(some #{%} selected))
+                                   (map #(into {} {:id % :page-id page-id})))]
+    (when frames-with-thumbnail frames-with-thumbnail)))
+
+
 (defn toggle-file-thumbnail-selected
   []
   (ptk/reify ::toggle-file-thumbnail-selected
@@ -1069,22 +1083,17 @@
       (let [selected (wsh/lookup-selected state)
             pages (get-in state [:workspace-data
                                  :pages-index])
-
-            extract-frames (fn [page-id]
-                             (let [objects (wsh/lookup-page-objects state page-id)]
-                               (cph/get-frames objects)))
-
-            frames-with-thumbnail (->> (keys pages)
-                                       (map extract-frames)
-                                       flatten
-                                       (filter (comp true? :file-thumbnail))
-                                       (map :id)
-                                       (remove #(some #{%} selected)))
-            _ (println "selected " selected)
-            _ (println frames-with-thumbnail)]
-
-        (rx/of (dch/update-shapes frames-with-thumbnail #(update % :file-thumbnail not))
-               (dch/update-shapes selected #(update % :file-thumbnail not)))))))
+            file-thumbnails (->> pages
+                     (map #(extract-file-thumbnails-from-page state selected %))
+                     flatten)]        
+        
+        (print "toggle-file-thumbnail-selected")
+        (rx/of (dch/update-shapes selected #(update % :file-thumbnail not)))
+        #_(rx/concat
+         (rx/from
+          (for [ft file-thumbnails]
+            (dch/update-shapes [(:id ft)] #(update % :file-thumbnail not) (:page-id ft) nil)))
+         (rx/of (dch/update-shapes selected #(update % :file-thumbnail not))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Navigation

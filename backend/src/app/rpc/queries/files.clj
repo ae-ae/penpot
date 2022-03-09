@@ -326,10 +326,8 @@
   [pages]
   (->> pages
        vals
-       (map :objects)
-       flatten
-       (map vals)
-       flatten
+       (mapcat :objects)
+       (mapcat vals)
        (filter :file-thumbnail)
        first))
 
