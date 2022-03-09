@@ -492,6 +492,7 @@
             changes
             (-> (pcb/empty-changes it)
                 (pcb/with-container container)
+                (pcb/with-objects (:objects container))
                 (dwlh/generate-sync-shape-direct libraries container id true))]
         (js/console.log "changes" (clj->js changes))
 
